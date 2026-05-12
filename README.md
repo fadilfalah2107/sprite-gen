@@ -1,16 +1,16 @@
 # sprite-gen skill
 
-Experimental Codex/Claude skill for generating quick 2D game sprite sheets for Kuma/Hermes-style live demos.
+Codex/Claude skill for generating clean 2D game sprites and animation atlases with a hatch-pet-style component-row pipeline.
 
-This is intentionally unfinished and demo-oriented. It is useful as a practical pipeline reference for:
+The workflow is intentionally single-path:
 
-- attaching a canonical character image as identity input;
-- generating magenta-keyed sprite sheets;
-- removing magenta backgrounds into alpha PNGs;
-- validating that a sheet is an actual animated character sheet rather than a tiled still image;
-- recovering `frame_layout` metadata when generated frames drift away from a fixed grid.
+```text
+sprite-request.json -> layout guides + prompts -> image-gen state rows
+-> chroma alpha -> connected components -> square frames
+-> sprite-sheet-alpha.png + manifest.json.frame_layout
+```
 
-The main workflow lives in [`SKILL.md`](SKILL.md). Deterministic helpers live under [`scripts/`](scripts/), and built-in layout references live under [`assets/`](assets/).
+The main workflow lives in [`SKILL.md`](SKILL.md). Deterministic helpers live under [`scripts/`](scripts/), and default request values live under [`assets/sprite-gen-assets.json`](assets/sprite-gen-assets.json).
 
 ## Install
 
@@ -24,7 +24,7 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
 
 ## Status
 
-Experimental. Expect to adapt prompts, validation thresholds, and runtime integration for each game/demo.
+Component-row is the canonical engine. Fixed-grid cutting and one-shot master sheets are no longer part of the accepted path.
 
 ## License
 
