@@ -16,6 +16,14 @@ def alpha_nonzero_count(image: Image.Image) -> int:
     return sum(image.getchannel("A").histogram()[1:])
 
 
+def cell_geometry(cell: dict[str, Any]) -> tuple[int, int]:
+    width = int(cell.get("width", cell.get("size", 0)))
+    height = int(cell.get("height", cell.get("size", 0)))
+    if width <= 0 or height <= 0:
+        raise SystemExit("cell width/height must be positive in sprite-request.json")
+    return width, height
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, type=Path)
@@ -32,19 +40,19 @@ def main() -> int:
         raise SystemExit("frames-manifest.json is not ok; fix extraction before composing atlas")
 
     states = list(request["states"])
-    cell_size = int(request["cell"]["size"])
+    cell_width, cell_height = cell_geometry(request["cell"])
     max_frames = max(int(request["states"][state]["frames"]) for state in states)
-    atlas = Image.new("RGBA", (max_frames * cell_size, len(states) * cell_size), (0, 0, 0, 0))
+    atlas = Image.new("RGBA", (max_frames * cell_width, len(states) * cell_height), (0, 0, 0, 0))
     frame_layout: dict[str, Any] = {
         "sheetWidth": atlas.width,
         "sheetHeight": atlas.height,
-        "cellWidth": cell_size,
-        "cellHeight": cell_size,
+        "cellWidth": cell_width,
+        "cellHeight": cell_height,
         "rows": {},
     }
     animation: dict[str, Any] = {
-        "cellWidth": cell_size,
-        "cellHeight": cell_size,
+        "cellWidth": cell_width,
+        "cellHeight": cell_height,
         "columns": max_frames,
         "rows": {},
     }
@@ -62,15 +70,15 @@ def main() -> int:
                 continue
             with Image.open(frame_path) as opened:
                 frame = opened.convert("RGBA")
-            if frame.size != (cell_size, cell_size):
-                errors.append(f"{frame_path} is {frame.width}x{frame.height}; expected {cell_size}x{cell_size}")
+            if frame.size != (cell_width, cell_height):
+                errors.append(f"{frame_path} is {frame.width}x{frame.height}; expected {cell_width}x{cell_height}")
             nontransparent = alpha_nonzero_count(frame)
             if nontransparent < args.min_used_pixels:
                 errors.append(f"{state} frame {frame_index} is too sparse ({nontransparent})")
-            left = frame_index * cell_size
-            top = row_index * cell_size
+            left = frame_index * cell_width
+            top = row_index * cell_height
             atlas.alpha_composite(frame, (left, top))
-            rect = {"x": left, "y": top, "w": cell_size, "h": cell_size}
+            rect = {"x": left, "y": top, "w": cell_width, "h": cell_height}
             frames.append(rect)
             cells.append({"state": state, "frame": frame_index, "nontransparent_pixels": nontransparent, **rect})
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Extract component-row sprite strips into clean square RGBA frames."""
+"""Extract component-row sprite strips into clean RGBA frames."""
 
 from __future__ import annotations
 
@@ -151,26 +151,37 @@ def component_group_image(source: Image.Image, components: list[dict[str, Any]],
     return output
 
 
-def fit_to_square(image: Image.Image, cell_size: int, safe_margin: int) -> Image.Image:
+def cell_geometry(cell: dict[str, Any]) -> tuple[int, int, int, int]:
+    width = int(cell.get("width", cell.get("size", 0)))
+    height = int(cell.get("height", cell.get("size", 0)))
+    safe_margin_x = int(cell.get("safe_margin_x", cell.get("safe_margin", 0)))
+    safe_margin_y = int(cell.get("safe_margin_y", cell.get("safe_margin", 0)))
+    if width <= 0 or height <= 0:
+        raise SystemExit("cell width/height must be positive in sprite-request.json")
+    return width, height, safe_margin_x, safe_margin_y
+
+
+def fit_to_cell(image: Image.Image, cell_width: int, cell_height: int, safe_margin_x: int, safe_margin_y: int) -> Image.Image:
     bbox = image.getbbox()
-    target = Image.new("RGBA", (cell_size, cell_size), (0, 0, 0, 0))
+    target = Image.new("RGBA", (cell_width, cell_height), (0, 0, 0, 0))
     if bbox is None:
         return target
     sprite = image.crop(bbox)
-    max_size = max(1, cell_size - safe_margin * 2)
-    scale = min(max_size / sprite.width, max_size / sprite.height, 1.0)
+    max_width = max(1, cell_width - safe_margin_x * 2)
+    max_height = max(1, cell_height - safe_margin_y * 2)
+    scale = min(max_width / sprite.width, max_height / sprite.height, 1.0)
     if scale != 1.0:
         sprite = sprite.resize(
             (max(1, round(sprite.width * scale)), max(1, round(sprite.height * scale))),
             Image.Resampling.LANCZOS,
         )
-    left = (cell_size - sprite.width) // 2
-    top = (cell_size - sprite.height) // 2
+    left = (cell_width - sprite.width) // 2
+    top = (cell_height - sprite.height) // 2
     target.alpha_composite(sprite, (left, top))
     return target
 
 
-def extract_component_frames(strip: Image.Image, frame_count: int, cell_size: int, safe_margin: int) -> list[Image.Image] | None:
+def extract_component_frames(strip: Image.Image, frame_count: int, cell_width: int, cell_height: int, safe_margin_x: int, safe_margin_y: int) -> list[Image.Image] | None:
     components = connected_components(strip)
     if not components:
         return None
@@ -199,16 +210,16 @@ def extract_component_frames(strip: Image.Image, frame_count: int, cell_size: in
         )
         groups[nearest_index].append(component)
 
-    return [fit_to_square(component_group_image(strip, group), cell_size, safe_margin) for group in groups]
+    return [fit_to_cell(component_group_image(strip, group), cell_width, cell_height, safe_margin_x, safe_margin_y) for group in groups]
 
 
-def extract_slot_frames(strip: Image.Image, frame_count: int, cell_size: int, safe_margin: int) -> list[Image.Image]:
+def extract_slot_frames(strip: Image.Image, frame_count: int, cell_width: int, cell_height: int, safe_margin_x: int, safe_margin_y: int) -> list[Image.Image]:
     slot_width = strip.width / frame_count
     frames = []
     for index in range(frame_count):
         left = round(index * slot_width)
         right = round((index + 1) * slot_width)
-        frames.append(fit_to_square(strip.crop((left, 0, right, strip.height)), cell_size, safe_margin))
+        frames.append(fit_to_cell(strip.crop((left, 0, right, strip.height)), cell_width, cell_height, safe_margin_x, safe_margin_y))
     return frames
 
 
@@ -277,8 +288,7 @@ def main() -> int:
     run_dir = args.run_dir.expanduser().resolve()
     request = json.loads((run_dir / "sprite-request.json").read_text(encoding="utf-8"))
     states = list(request["states"]) if args.states == "all" else [state.strip() for state in args.states.split(",") if state.strip()]
-    cell_size = int(request["cell"]["size"])
-    safe_margin = int(request["cell"]["safe_margin"])
+    cell_width, cell_height, safe_margin_x, safe_margin_y = cell_geometry(request["cell"])
     chroma_key = tuple(int(value) for value in request["chroma_key"]["rgb"])
     frames_root = run_dir / "frames"
     rows = []
@@ -301,13 +311,13 @@ def main() -> int:
                 args.fringe_key_threshold,
                 args.fringe_delta,
             )
-        frames = extract_component_frames(strip, frame_count, cell_size, safe_margin)
+        frames = extract_component_frames(strip, frame_count, cell_width, cell_height, safe_margin_x, safe_margin_y)
         method = "components"
         if frames is None:
             if not args.allow_slot_fallback:
                 all_errors.append(f"{state}: could not extract {frame_count} sprite components")
                 continue
-            frames = extract_slot_frames(strip, frame_count, cell_size, safe_margin)
+            frames = extract_slot_frames(strip, frame_count, cell_width, cell_height, safe_margin_x, safe_margin_y)
             method = "slots-explicit"
 
         state_dir = frames_root / state
