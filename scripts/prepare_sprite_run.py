@@ -475,6 +475,8 @@ def row_prompt(request: dict[str, Any], state: str, entry: dict[str, Any]) -> st
             "\n\nMotion phase requirements:\n"
             "- The layout guide includes simple stick-pose motion hints inside each slot. Use those hints only for body height, foot contact, and leg phase. Do not copy guide colors or guide lines into the artwork.\n"
             "- Make the sequence loop as one continuous locomotion cycle, not eight unrelated poses.\n"
+            "- The motion phase guide and any multi-pose contact sheet override a single running/walking pose anchor for leg phase. Do not repeat one anchor's forward leg across every frame.\n"
+            "- Opposite contact frames must visibly trade which leg reaches forward; passing frames must not look like duplicate contact frames.\n"
             + "\n".join(phase_lines)
         )
     transparency_artifact_text = "\n".join(f"- {rule}" for rule in TRANSPARENCY_ARTIFACT_RULES)
@@ -496,6 +498,7 @@ Anchor lock:
 - Do not redesign or reinterpret identity details while animating. Keep face, hair shape, markings, palette, outline weight, body proportions, outfit, props, and silhouette copied from the approved anchors.
 - Preserve side-specific features exactly as the approved anchors show them. Do not solve hairpin side, earring side, logos, handed props, scars, one-sided markings, asymmetric clothing, or lighting cues from scratch inside the row.
 - When generating a paired left/right row, use the paired row reference only for timing, scale, and animation intensity. Rotate the body, feet, shoulders, face angle, and gaze to the target facing, but keep identity details attached according to the accepted target-direction anchor.
+- For cyclic locomotion, do not let a single running/walking pose anchor determine every frame's leg phase. Use multi-pose motion references and the layout phase guide for foot contacts.
 - Prefer a subtler animation over any change that mutates the character identity.
 {state_requirement_text}
 {phase_prompt_text}

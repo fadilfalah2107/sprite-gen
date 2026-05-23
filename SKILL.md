@@ -278,10 +278,16 @@ in one image.
    - 45-degree 4-way: accepted `idle-front-right`, `idle-front-left`,
      `idle-back-right`, `idle-back-left`
 
-3. **State anchor gate** — for each requested state and direction, create one
-   representative state anchor before generating the multi-frame row. For
-   example, `running-front-right-anchor` should show the peak readable pose for
-   that direction, while `idle-front-right` still owns facing.
+3. **State anchor gate** — for each requested non-locomotion state and
+   direction, create one representative state anchor before generating the
+   multi-frame row. For example, `working-front-right-anchor` can show the
+   approved desk/computer pose while `idle-front-right` still owns facing.
+   For cyclic locomotion (`running`, `walking`, `run`, `walk`, and directional
+   variants), do **not** feed a single peak-pose state anchor into the final
+   row. A single contact pose causes the model to repeat that same leg phase
+   across every frame. Locomotion needs a motion-phase reference that contains
+   both opposite contacts, such as a contact sheet, selected cycle, or layout
+   phase guide.
 
 4. **Asymmetric identity gate** — lock side-specific character features before
    paired direction generation. Hairpins, earrings, scars, logos, handed props,
@@ -298,7 +304,8 @@ in one image.
    - direction idle anchor: facing/orientation plus visible side-specific
      identity details for that direction
    - state anchor: pose/state vocabulary plus the approved state-specific
-     identity rendering
+     identity rendering, for non-locomotion states only
+   - locomotion motion sheet/contact sheet: foot-contact phase and gait rhythm
    - paired basis row: timing, scale, and animation intensity
    - layout guide: frame count, slots, margins, optional motion phase
    The row prompt must keep character detail as an already-approved input and
@@ -306,6 +313,9 @@ in one image.
    counter-swing, body height, torso lean, head bob, hair bounce, and loop seam.
    Do not ask the row to decide hairpin side, outfit details, colors, face
    design, or other identity features from scratch.
+   For locomotion rows, a single running/walking pose anchor is not valid row
+   grounding unless it is part of a multi-pose contact sheet with both
+   left-forward and right-forward contacts visible.
 
 6. **Hatch-pet left/right gate** — preserve the hatch-pet-proven left/right
    pattern. Generate the right/basis row first, inspect it, then generate the
@@ -359,7 +369,13 @@ For any four-direction 45-degree state, use two basis rows and two paired rows:
 3. Generate `<state>-back-right` first.
 4. Generate `<state>-back-left` with `raw/<state>-back-right.png` attached as the paired-row reference.
 
-For locomotion rows, the paired-row reference is a gait rhythm reference. For non-locomotion rows, it is a pose-family and scale reference: keep the same prop scale, body size, frame occupancy, and animation intensity while changing the facing direction.
+For locomotion rows, the paired-row reference is a gait rhythm reference. Do
+not attach a single running/walking state pose as the main row reference; it
+will bias every frame toward that one leg phase. Use a motion contact sheet,
+selected cycle, or the previously approved basis row for timing. For
+non-locomotion rows, the paired-row reference is a pose-family and scale
+reference: keep the same prop scale, body size, frame occupancy, and animation
+intensity while changing the facing direction.
 
 The direction sheet is still required for both basis and paired rows. The paired row is not allowed to copy the basis facing.
 
