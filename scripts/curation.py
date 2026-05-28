@@ -50,7 +50,7 @@ from PIL import Image
 
 CURATION_FILENAME = "curation.json"
 SCHEMA_VERSION = 1
-IDENTITY = {"rotate": 0.0, "scale": 1.0, "dx": 0, "dy": 0, "shx": 0.0, "shy": 0.0}
+IDENTITY = {"rotate": 0.0, "scale": 1.0, "dx": 0, "dy": 0, "shx": 0.0, "shy": 0.0, "flipX": 0}
 
 
 def curation_path(run_dir: Path) -> Path:
@@ -69,7 +69,7 @@ def load_curation(run_dir: Path) -> dict[str, Any] | None:
 
 
 def normalize_transform(raw: Any) -> dict[str, float]:
-    """Coerce a stored transform into a full {rotate, scale, dx, dy, shx, shy} dict."""
+    """Coerce a stored transform into a full {rotate, scale, dx, dy, shx, shy, flipX} dict."""
     if not isinstance(raw, dict):
         return dict(IDENTITY)
     return {
@@ -79,6 +79,9 @@ def normalize_transform(raw: Any) -> dict[str, float]:
         "dy": float(raw.get("dy", 0)),
         "shx": float(raw.get("shx", 0.0)),
         "shy": float(raw.get("shy", 0.0)),
+        # (Alex 2026-05-28) flipX: 0 | 1 — horizontal mirror. Image-gen 결과가 좌우
+        # 반대로 나올 때 frame 별로 거울 반전. matrix 마지막에 diag(-1, 1) 곱.
+        "flipX": 1 if raw.get("flipX") else 0,
     }
 
 
@@ -90,15 +93,17 @@ def is_identity(transform: dict[str, float]) -> bool:
         and abs(transform["dy"]) < 1e-6
         and abs(transform.get("shx", 0.0)) < 1e-6
         and abs(transform.get("shy", 0.0)) < 1e-6
+        and not transform.get("flipX", 0)
     )
 
 
 def transform_matrix(t: dict[str, float]) -> tuple[float, float, float, float]:
-    """Forward 2x2 linear matrix (M00, M01, M10, M11) = Rotate · Shear · Scale.
+    """Forward 2x2 linear matrix (M00, M01, M10, M11) = Rotate · Shear · Scale · FlipX.
 
     Screen y-down. Positive `rotate` is counter-clockwise. This exact matrix is
     mirrored in the webview (CSS `matrix()` + canvas), so what the user aligns to
-    the ground grid is what bakes — no preview/bake drift.
+    the ground grid is what bakes — no preview/bake drift. flipX (when set)
+    multiplies the right-most diag(-1, 1) so column-0 의 부호가 반전된다.
     """
     rr = math.radians(t["rotate"])
     c, sn = math.cos(rr), math.sin(rr)
@@ -107,6 +112,8 @@ def transform_matrix(t: dict[str, float]) -> tuple[float, float, float, float]:
     m01 = s * (c * shx + sn)
     m10 = s * (-sn + c * shy)
     m11 = s * (c - sn * shx)
+    if t.get("flipX"):
+        m00, m10 = -m00, -m10
     return m00, m01, m10, m11
 
 

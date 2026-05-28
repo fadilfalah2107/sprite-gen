@@ -53,6 +53,9 @@ button {
 button:hover { background: #34597a; }
 button.ghost { background: transparent; padding: 3px 8px; font-size: 12px; }
 button.ghost:hover { background: var(--panel-2); }
+/* (Alex 2026-05-28) flipX 활성 표시 — accent 색으로 강조. */
+button.ghost.flip-btn.active { background: var(--accent, #0ea5e9); color: #fff; }
+button.ghost.flip-btn.active:hover { background: var(--accent, #0ea5e9); filter: brightness(1.1); }
 
 main { padding: 18px; display: flex; flex-direction: column; gap: 26px; }
 
@@ -73,13 +76,17 @@ main { padding: 18px; display: flex; flex-direction: column; gap: 26px; }
 .state-head .action { color: var(--muted); font-size: 12px; font-style: italic; }
 .state-warn { color: var(--danger); font-size: 12px; }
 
-.state-body { display: flex; gap: 18px; align-items: flex-start; }
+.state-body { display: flex; gap: 18px; align-items: flex-start; min-width: 0; }
 .frames {
   display: flex;
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 8px;
   flex: 1;
+  /* (Alex 2026-05-28) flex child 가 content (3000px+) 만큼 늘어나면 overflow-x:auto
+     가 발화 안 함 — 가로 18 frame 다 못 봄. min-width:0 으로 flex 의 default
+     min-content 동작을 끄고 부모 폭에 fit + 가로 scrollbar 가 발화하도록. */
+  min-width: 0;
 }
 
 .card {

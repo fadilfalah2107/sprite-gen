@@ -7,12 +7,12 @@
 // (CSS + canvas) negates it because screen/CSS/canvas positive rotation is
 // clockwise, so what you see is what compose_sprite_atlas.py will bake.
 
-const IDENTITY = () => ({ rotate: 0, scale: 1, dx: 0, dy: 0, shx: 0, shy: 0 });
+const IDENTITY = () => ({ rotate: 0, scale: 1, dx: 0, dy: 0, shx: 0, shy: 0, flipX: 0 });
 const SCALE_MIN = 0.2;
 const SCALE_MAX = 3;
 const DRAG_THRESHOLD = 4;
 
-// forward 2x2 matrix (Rotate · Shear · Scale); mirrors curation.py transform_matrix
+// forward 2x2 matrix (Rotate · Shear · Scale · FlipX); mirrors curation.py transform_matrix
 function matrixOf(t) {
   const rr = (t.rotate * Math.PI) / 180;
   const c = Math.cos(rr);
@@ -20,12 +20,17 @@ function matrixOf(t) {
   const s = t.scale;
   const shx = t.shx || 0;
   const shy = t.shy || 0;
-  return {
-    m00: s * (c + sn * shy),
-    m01: s * (c * shx + sn),
-    m10: s * (-sn + c * shy),
-    m11: s * (c - sn * shx),
-  };
+  let m00 = s * (c + sn * shy);
+  const m01 = s * (c * shx + sn);
+  let m10 = s * (-sn + c * shy);
+  const m11 = s * (c - sn * shx);
+  // (Alex 2026-05-28) flipX = horizontal mirror (image-gen 결과가 좌우 반대로
+  // 나올 때). diag(-1, 1) 을 matrix 마지막에 곱 → column-0 부호 반전.
+  if (t.flipX) {
+    m00 = -m00;
+    m10 = -m10;
+  }
+  return { m00, m01, m10, m11 };
 }
 
 // --- i18n (en / ko; initial language from server --lang, toggle reloads) ----
@@ -39,7 +44,7 @@ const STR = {
     baking: "baking…", composeDone: "atlas baked", composeFail: "bake failed: ",
     exporting: "exporting…", exportFail: "export failed: ",
     ready: "ready", loaded: "loaded existing curation", runLoadFail: "failed to load run:",
-    tRotate: "rotate", tShear: "shear — horizontal = shx, vertical = shy", tReset: "reset transform",
+    tRotate: "rotate", tShear: "shear — horizontal = shx, vertical = shy", tReset: "reset transform", tFlipX: "flip horizontally",
     hints: ["drag = move", "wheel = scale", "top handle = rotate", "bottom-left = shear", "click card = select/deselect", "saved automatically"],
     exportDone: (n) => `${n} PNGs → curated/`,
   },
@@ -52,7 +57,7 @@ const STR = {
     baking: "굽는 중…", composeDone: "아틀라스 완료", composeFail: "굽기 실패: ",
     exporting: "내보내는 중…", exportFail: "내보내기 실패: ",
     ready: "준비됨", loaded: "기존 큐레이션 로드됨", runLoadFail: "run 로드 실패:",
-    tRotate: "회전", tShear: "기울이기 — 가로=shx, 세로=shy", tReset: "보정 초기화",
+    tRotate: "회전", tShear: "기울이기 — 가로=shx, 세로=shy", tReset: "보정 초기화", tFlipX: "좌우 반전",
     hints: ["드래그 = 이동", "휠 = 확대/축소", "상단 핸들 = 회전", "좌하단 = 기울이기", "카드 클릭 = 선택/해제", "자동 저장"],
     exportDone: (n) => `PNG ${n}장 → curated/`,
   },
@@ -111,7 +116,7 @@ function buildPayload() {
   for (const [name, entry] of Object.entries(entries)) {
     const transforms = {};
     for (const [idx, t] of Object.entries(entry.transforms)) {
-      if (t.rotate || t.scale !== 1 || t.dx || t.dy || t.shx || t.shy) transforms[idx] = t;
+      if (t.rotate || t.scale !== 1 || t.dx || t.dy || t.shx || t.shy || t.flipX) transforms[idx] = t;
     }
     states[name] = { selected: entry.selected, transforms };
   }
@@ -151,8 +156,12 @@ function applyCardTransform(stage, stateName, idx) {
   el.style.transform =
     `translate(${t.dx * ds}px, ${t.dy * ds}px) matrix(${m.m00}, ${m.m10}, ${m.m01}, ${m.m11}, 0, 0)`;
   const sh = t.shx || t.shy ? ` sh${(t.shx || 0).toFixed(2)},${(t.shy || 0).toFixed(2)}` : "";
-  stage.closest(".card").querySelector(".tvals").textContent =
-    `r${t.rotate.toFixed(0)}° ×${t.scale.toFixed(2)} ${t.dx >= 0 ? "+" : ""}${t.dx.toFixed(0)},${t.dy >= 0 ? "+" : ""}${t.dy.toFixed(0)}${sh}`;
+  const flip = t.flipX ? " ↔" : "";
+  const card = stage.closest(".card");
+  card.querySelector(".tvals").textContent =
+    `r${t.rotate.toFixed(0)}° ×${t.scale.toFixed(2)} ${t.dx >= 0 ? "+" : ""}${t.dx.toFixed(0)},${t.dy >= 0 ? "+" : ""}${t.dy.toFixed(0)}${sh}${flip}`;
+  const flipBtn = card.querySelector(".flip-btn");
+  if (flipBtn) flipBtn.classList.toggle("active", !!t.flipX);
 }
 
 // --- interactions ----------------------------------------------------------
@@ -349,6 +358,7 @@ function renderCard(state, frame) {
     `<div class="stage">${stageInner}</div>` +
     `<div class="card-controls">` +
     `<span class="tvals"></span>` +
+    `<button type="button" class="ghost flip-btn" title="${t("tFlipX")}" aria-label="flip-x">↔</button>` +
     `<button type="button" class="ghost reset-btn" title="${t("tReset")}">↺</button>` +
     `</div>`;
 
@@ -361,8 +371,24 @@ function renderCard(state, frame) {
     card.querySelector(".reset-btn").addEventListener("click", () =>
       resetTransform(state.name, frame.index, card.querySelector(".stage"))
     );
+    card.querySelector(".flip-btn").addEventListener("click", () =>
+      toggleFlipX(state.name, frame.index, card.querySelector(".stage"))
+    );
   }
   return card;
+}
+
+/** Toggle horizontal flip for a single frame (Alex 2026-05-28). */
+function toggleFlipX(stateName, idx, stage) {
+  const entry = entries[stateName];
+  if (!entry) return;
+  if (!entry.transforms[idx]) entry.transforms[idx] = IDENTITY();
+  entry.transforms[idx].flipX = entry.transforms[idx].flipX ? 0 : 1;
+  applyTransform(stage, entry.transforms[idx]);
+  // flip state 가 적용된 버튼은 살짝 강조 (active class — CSS 가 처리).
+  const btn = stage.closest(".card").querySelector(".flip-btn");
+  btn.classList.toggle("active", !!entry.transforms[idx].flipX);
+  scheduleSave();
 }
 
 function renderPreview(state) {
