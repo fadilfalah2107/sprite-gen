@@ -490,4 +490,5 @@ qa_note=<one sentence>
 
 ## Related Docs
 
+- [`docs/architecture.md`](docs/architecture.md) — how the scripts realize this contract: pipeline stages, the single-cell geometry model, extraction internals, curation sidecar, runtime manifest, and the hatch-pet comparison. Describes the code as-is; if it disagrees with this SKILL.md, this file wins.
 - [`docs/skill-improvement-plan.md`](docs/skill-improvement-plan.md) — SKILL.md / scripts 개선 후보 (quick wins · 중간 · 큰 변경) 우선순위 초안. DRAFT — 본 SKILL.md 의 SSoT 와 충돌하면 본 파일이 우선한다.
