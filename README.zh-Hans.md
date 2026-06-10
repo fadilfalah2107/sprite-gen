@@ -1,6 +1,6 @@
 # sprite-gen
 
-[English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md) · **简体中文**
+[English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md) · **简体中文** · [Español](README.es.md) · [Français](README.fr.md)
 
 用于生成干净的 2D 游戏精灵和动画图集的 Codex/Claude 技能，采用组件行流水线，并配有一个独立的 webview，用于在烘焙前审查、筛选和修正帧。
 
