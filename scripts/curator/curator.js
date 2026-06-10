@@ -384,10 +384,8 @@ function toggleFlipX(stateName, idx, stage) {
   if (!entry) return;
   if (!entry.transforms[idx]) entry.transforms[idx] = IDENTITY();
   entry.transforms[idx].flipX = entry.transforms[idx].flipX ? 0 : 1;
-  applyTransform(stage, entry.transforms[idx]);
-  // flip state 가 적용된 버튼은 살짝 강조 (active class — CSS 가 처리).
-  const btn = stage.closest(".card").querySelector(".flip-btn");
-  btn.classList.toggle("active", !!entry.transforms[idx].flipX);
+  // applyCardTransform renders the mirror and highlights the flip button.
+  applyCardTransform(stage, stateName, idx);
   scheduleSave();
 }
 
