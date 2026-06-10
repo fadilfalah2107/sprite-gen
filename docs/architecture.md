@@ -48,9 +48,17 @@ sprite-request.json  (numeric SSoT)
 | Export stills | `export_curated_pngs.py` | curated `frames/` | named PNGs under `<run-dir>/curated/` |
 | Chroma guard | `check_visible_magenta.py` | screenshot | leakage warning |
 
-The scripts are explicit pipeline commands, not hidden imports. The only shared
-import is `curation.py` (schema + transform math), kept single-source so the
-webview server and the compose scripts cannot drift.
+The scripts are explicit pipeline commands, not hidden imports. The shared
+imports are `curation.py` (schema + transform math, kept single-source so the
+webview server and the compose scripts cannot drift) and `runio.py` (safe
+run-dir IO: a single-writer lock file `.sprite-gen.lock` taken by the
+extract/compose/export/unpack writers, plus atomic temp+`os.replace` writes for
+frames, atlas, and manifests). The lock enforces the "one worker owns one
+character folder" rule at runtime — a second writer on the same run dir fails
+loudly with the holder's pid; a dead holder's lock is reclaimed automatically.
+`curation.json` stays outside the lock: the webview writes it atomically and
+compose reads one consistent snapshot, so human edit sessions never block on a
+running compose.
 
 ## 3. The numeric SSoT: `sprite-request.json`
 

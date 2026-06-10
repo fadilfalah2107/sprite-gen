@@ -14,6 +14,7 @@ depends_on:
     - scripts/compose_sprite_gif.py
     - scripts/gif_utils.py
     - scripts/curation.py
+    - scripts/runio.py
     - scripts/serve_curation.py
     - scripts/unpack_atlas_run.py
     - scripts/export_curated_pngs.py
@@ -45,6 +46,7 @@ The skill uses scripts as explicit pipeline commands, not as hidden imports. Eac
 - `compose_sprite_gif.py` — export a clean transparent GIF from selected frame PNGs and optional frame order.
 - `gif_utils.py` — shared transparent-GIF writer used by the GIF/QA scripts.
 - `curation.py` — shared curation sidecar logic (schema + transform application) used by the compose scripts and the curation webview server. Single source of truth so they never drift.
+- `runio.py` — shared safe run-dir IO: the single-writer run-dir lock (`.sprite-gen.lock`) and atomic temp+replace writes used by the extract/compose/export/unpack writers, so two agents (for example Claude Code and Codex in parallel) cannot silently interleave writes into one character folder.
 - `serve_curation.py` — launch the standalone curation webview for one run dir (frame compare, select/reject, non-destructive rotate/scale/move). Standalone so it works from Claude Code Desktop, the Codex app, or any environment where the skill is installed.
 - `unpack_atlas_run.py` — inverse of compose: rebuild a curator-ready run dir (per-frame PNGs + synthesized `sprite-request.json`) from a finished sprite sheet, or import a folder of separate PNGs (`--pngs-dir`, e.g. a furniture pack). Layout source priority: explicit `--grid COLSxROWS` > `--manifest` rectangles > auto-detect (default). Auto-detect reads the atlas alpha and clusters content blobs into a grid, so it survives a character's internal transparency on packed sheets. With `--pngs-dir`, a sibling `meta.json` (item names + iso tile/anchor) is carried into the run so the curator can label items and draw the iso ground grid.
 - `export_curated_pngs.py` — export curated frames back to named PNGs (the curation transform baked in), keeping each item's original filename. Output goes inside the run dir (`<run-dir>/curated/`, provably writable, cross-platform); the skill never writes elsewhere in your tree. The right deliverable for an imported still set (furniture); the single-atlas `compose_sprite_atlas.py` is the deliverable for animation frames / runtime perf.
@@ -343,6 +345,23 @@ manifest.json
 ```
 
 `manifest.json.frame_layout` is the runtime SSoT. Game code must consume rectangles from the manifest and must not recover frame rectangles from alpha content at runtime.
+
+5. Launch the curation webview automatically (default closing step):
+
+```bash
+python3 $ALEX_EXTENSIONS_DIR/sprite-gen/scripts/serve_curation.py \
+  --run-dir <target>/assets/generated/sprites/<character-id> &
+```
+
+After the atlas composes (and QA previews exist), launch the webview in the background and report the printed URL to the user — do not wait for them to ask. Curation is where a human accepts or fixes the result, so finishing a run means handing them the open webview, not just file paths.
+
+Multi-agent rules for the auto-launch:
+
+- The server picks a free port per launch (`--port 0` default) and serves exactly one run dir, so several agents curating different characters can each keep a webview open with no port or state conflicts.
+- One curator webview per run dir. Two webviews on the same run dir are last-write-wins on `curation.json`; if one is already serving that run dir, reuse its URL instead of launching another.
+- Pipeline writes are guarded by a run-dir lock (`.sprite-gen.lock`): extract/compose/export/unpack fail loudly when another sprite-gen process is writing the same run dir. Treat that error as "wait or pick another run dir", not as a retry-until-success loop.
+- In a headless/remote session add `--no-open` and give the user the URL; on the user's own machine the default auto-opens their browser.
+- Skip the auto-launch only when the user explicitly asked for an unattended batch run.
 
 ## Prompt Contract
 
