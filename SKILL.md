@@ -1,5 +1,6 @@
 ---
 name: sprite-gen
+version: 1.6.0
 description: "Generate clean 2D game sprites and animation atlases with a component-row pipeline: base identity, numeric sprite-request SSoT, per-state layout guides, image-gen row strips, chroma-key alpha cleanup, connected-component frame extraction, cell-based atlas composition, QA reports, and runtime manifest frame_layout."
 license: Apache-2.0
 depends_on:
