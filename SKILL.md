@@ -1,7 +1,7 @@
 ---
 name: sprite-gen
-version: 1.6.0
-description: "Generate clean 2D game sprites and animation atlases with a component-row pipeline: base identity, numeric sprite-request SSoT, per-state layout guides, image-gen row strips, chroma-key alpha cleanup, connected-component frame extraction, cell-based atlas composition, QA reports, and runtime manifest frame_layout."
+version: 1.7.0
+description: "Generate clean 2D game sprites and animation atlases with a component-row pipeline: base identity, numeric sprite-request SSoT, per-state layout guides, image-gen row strips, chroma-key alpha cleanup, connected-component frame extraction, cell-based atlas composition, QA reports, and runtime manifest frame_layout. Its curation webview also serves ANY image-candidate set (icons, logos, generated drafts) — agent chat can't render images, this can: unpack_atlas_run --pngs-dir import, then serve_curation side-by-side compare/pick. Curation triggers (KR/EN): 큐레이션, 큐레이션뷰, 큐레이션 해줘, 이미지 후보 보여줘/안 보임, 나란히 비교, 골라볼게 띄워줘, curation view, show image candidates side by side, let me pick."
 license: Apache-2.0
 depends_on:
   required_skills:
@@ -52,6 +52,27 @@ The skill uses scripts as explicit pipeline commands, not as hidden imports. Eac
 - `unpack_atlas_run.py` — inverse of compose: rebuild a curator-ready run dir (per-frame PNGs + synthesized `sprite-request.json`) from a finished sprite sheet, or import a folder of separate PNGs (`--pngs-dir`, e.g. a furniture pack). Layout source priority: explicit `--grid COLSxROWS` > `--manifest` rectangles > auto-detect (default). Auto-detect reads the atlas alpha and clusters content blobs into a grid, so it survives a character's internal transparency on packed sheets. With `--pngs-dir`, a sibling `meta.json` (item names + iso tile/anchor) is carried into the run so the curator can label items and draw the iso ground grid.
 - `export_curated_pngs.py` — export curated frames back to named PNGs (the curation transform baked in), keeping each item's original filename. Output goes inside the run dir (`<run-dir>/curated/`, provably writable, cross-platform); the skill never writes elsewhere in your tree. The right deliverable for an imported still set (furniture); the single-atlas `compose_sprite_atlas.py` is the deliverable for animation frames / runtime perf.
 - `check_visible_magenta.py` — optional screenshot QA guard for visible chroma-key leakage.
+
+## Standalone Curation View (이미지 후보 큐레이션 — 스프라이트 아님)
+
+"큐레이션(뷰) 해줘 / 이미지 후보 보여줘 / 나란히 비교 / 골라볼게" 로 진입했고 대상이 **애니메이션 프레임이
+아니라 임의 이미지 후보군**(아이콘 시안, 로고, 생성 초안)이면, 파이프라인 없이 이 단독 경로만 쓴다.
+에이전트 채팅 surface 는 이미지를 못 보여주는 경우가 많다 — 이 웹뷰가 그 표시 수단이다.
+
+```bash
+SG=${ALEX_EXTENSIONS_DIR:-$HOME/Documents/workspace/personal/alex-extensions}/sprite-gen
+STAGE=$(mktemp -d /tmp/curation-XXXXXX); mkdir -p "$STAGE/pngs"
+cp <후보들> "$STAGE/pngs/"   # 의미 있는 이름으로: 1-hub-cube.png, 2-hook-plug.png ... (timestamp/uuid 파일명 금지)
+python3 "$SG/scripts/unpack_atlas_run.py" --pngs-dir "$STAGE/pngs" --out-dir "$STAGE/run" --force
+nohup python3 "$SG/scripts/serve_curation.py" --run-dir "$STAGE/run" --lang ko > "$STAGE/server.log" 2>&1 &
+sleep 2
+PORT=$(lsof -nP -a -p $! -iTCP -sTCP:LISTEN | awk 'END{sub(".*:","",$9); print $9}')   # stdout 버퍼링 때문에 log 대신 lsof 로 포트 확보
+curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/"   # 200 = positive proof, 그 후 URL 보고
+```
+
+- 사용자 로컬이면 브라우저 자동 오픈이 기본, headless/원격이면 `--no-open` + URL 전달.
+- 선택 회수는 `"$STAGE/run/curation.json"` 의 `selected` 인덱스를 파일명으로 역매핑. 비어 있으면 다시 묻는다 — 추측 진행 금지.
+- 결정 후 서버 kill + `$STAGE` 정리. 후보가 1장이면 큐레이션이 아니다 — 경로만 보고하고 끝.
 
 ## Simple MVP Scope
 

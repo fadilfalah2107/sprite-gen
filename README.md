@@ -1,24 +1,4 @@
-# sprite-gen
-
 <p align="center">
-  <img src="docs/claudecy-running.gif" width="160" alt="claudecy running" />
-</p>
-
-**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-Hans.md) · [Español](README.es.md) · [Français](README.fr.md)
-
-A Codex/Claude skill for generating clean 2D game sprites and animation atlases with a component-row pipeline — and a standalone webview for reviewing, curating, and fixing the frames before they bake.
-
-```text
-sprite-request.json → layout guides + prompts → image-gen state rows
-→ chroma alpha → connected components → transparent frames
-→ sprite-sheet-alpha.png + manifest.json.frame_layout
-```
-
-## Example output
-
-Sprites generated and curated with this skill (`claudecy`, `howl`):
-
-<p>
   <img src="docs/claudecy-idle.gif" width="110" alt="claudecy idle" />
   <img src="docs/claudecy-running.gif" width="110" alt="claudecy running" />
   <img src="docs/claudecy-success.gif" width="110" alt="claudecy success" />
@@ -28,15 +8,47 @@ Sprites generated and curated with this skill (`claudecy`, `howl`):
   <img src="docs/howl-success.gif" width="110" alt="howl success" />
 </p>
 
+<h1 align="center">sprite-gen</h1>
+
+<p align="center"><b>One drawing in. A game-ready sprite atlas out.</b></p>
+
+<p align="center">
+
+**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-Hans.md) · [Español](README.es.md) · [Français](README.fr.md)
+
+</p>
+
+---
+
+Ask an image model for a "sprite sheet" and you know what you get: a character whose face changes every frame, a background that won't key out, poses that overlap and drift off-grid, and a PNG your game engine can't actually consume. Cute demo, useless asset.
+
+`sprite-gen` is a Codex/Claude skill that closes that gap. Give it **one base image** and a list of actions — it drives the generation row by row, locks the character's identity, strips the chroma background to real alpha, extracts each pose as a clean transparent frame, and bakes a runtime atlas **with a machine-readable `manifest.json.frame_layout`**. Every sprite above was made this way.
+
+And for the last 10% that generation never gets right, there's a **curation webview**: compare frames side by side, reject the broken ones, nudge rotation/scale/position non-destructively, watch the loop live — then bake. The pipeline does the labor; you keep the taste.
+
+```text
+sprite-request.json → layout guides + prompts → image-gen state rows
+→ chroma alpha → connected components → transparent frames
+→ sprite-sheet-alpha.png + manifest.json.frame_layout
+```
+
+## What you actually get
+
+- **A transparent sprite atlas** (`sprite-sheet-alpha.png`) — real alpha, no leftover chroma fringe, verified against white backgrounds.
+- **A runtime manifest** (`manifest.json.frame_layout`) — absolute frame rectangles, per-state fps and loop flags. Your engine samples rectangles; it never guesses a grid.
+- **QA you can watch** — per-state GIFs and contact sheets, so motion is judged as motion before anything ships.
+- **Honest labels** — short readable actions (idle, jump, attack, wave) are the stable path; cyclic locomotion (walk/run) is marked experimental unless motion QA actually passes. No silent overpromising.
+
 ## Curation webview
 
-After frames are extracted, launch a standalone local webview to review them — no Studio or framework dependency, so it runs anywhere the skill is installed (Claude Code Desktop, the Codex app, a plain terminal).
+Generation gets you 90%. The webview is where a human takes it to *shipped* — standalone, no Studio or framework dependency, runs anywhere the skill is installed (Claude Code Desktop, the Codex app, a plain terminal).
 
 ![curation webview — characters](docs/demo-character.gif)
 
 - **Compare frames side by side** per state, and **select / reject** individual frames.
-- **Non-destructive transform** per frame: drag = move, wheel = scale, top handle = rotate, bottom-left handle = shear. Edits are saved to a `curation.json` sidecar — the source PNGs are never rewritten, and the compose step bakes the result deterministically. Preview (CSS + canvas) and bake share one affine matrix, so what you align is what you get.
+- **Non-destructive transform** per frame: drag = move, wheel = scale, top handle = rotate, bottom-left handle = shear. Edits live in a `curation.json` sidecar — source PNGs are never rewritten, and the compose step bakes the result deterministically. Preview and bake share one affine matrix, so what you align is what you get.
 - **Live preview** animates the selected frames at the state's fps.
+- Not just for sprites: point it at any folder of image candidates (icons, logos, generated drafts) with `unpack_atlas_run.py --pngs-dir` and use it as a general pick-the-winner view.
 
 ### Isometric ground grid
 
