@@ -32,6 +32,12 @@ sprite-request.json → layout guides + prompts → image-gen state rows
 → sprite-sheet-alpha.png + manifest.json.frame_layout
 ```
 
+<p align="center">
+  <img src="docs/architecture-diagram.ko.png" width="640" alt="sprite-gen 아키텍처 — 컴포넌트-행 파이프라인" />
+</p>
+
+> 전체 아키텍처: [`docs/architecture.md`](docs/architecture.md) · 다이어그램 소스: [`docs/architecture-diagram.ko.html`](docs/architecture-diagram.ko.html)
+
 ## 실제로 얻는 것
 
 - **투명 스프라이트 아틀라스**(`sprite-sheet-alpha.png`) — 실제 알파 채널을 사용하며 잔여 크로마 테두리 없음, 흰 배경에서 검증 완료.

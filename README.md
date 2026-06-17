@@ -32,6 +32,12 @@ sprite-request.json → layout guides + prompts → image-gen state rows
 → sprite-sheet-alpha.png + manifest.json.frame_layout
 ```
 
+<p align="center">
+  <img src="docs/architecture-diagram.png" width="640" alt="sprite-gen architecture — component-row pipeline" />
+</p>
+
+> Full architecture: [`docs/architecture.md`](docs/architecture.md) · diagram source: [`docs/architecture-diagram.html`](docs/architecture-diagram.html)
+
 ## What you actually get
 
 - **A transparent sprite atlas** (`sprite-sheet-alpha.png`) — real alpha, no leftover chroma fringe, verified against white backgrounds.
