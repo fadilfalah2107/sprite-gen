@@ -111,6 +111,25 @@ main { padding: 18px; display: flex; flex-direction: column; gap: 26px; }
   color: var(--muted);
 }
 .card-top .idx { color: var(--text); }
+.card-top .ct-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.grip {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -1px;
+  padding: 0 2px;
+  user-select: none;
+  touch-action: none; /* claim the pointer so the scroll row doesn't steal the drag */
+}
+.grip:hover { color: var(--text); }
+.grip:active { cursor: grabbing; }
+.card.dragging {
+  opacity: 0.85;
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.card.dragging .grip { cursor: grabbing; }
 
 .stage {
   position: relative;

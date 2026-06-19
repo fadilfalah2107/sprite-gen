@@ -45,7 +45,8 @@ const STR = {
     exporting: "exporting…", exportFail: "export failed: ",
     ready: "ready", loaded: "loaded existing curation", runLoadFail: "failed to load run:",
     tRotate: "rotate", tShear: "shear — horizontal = shx, vertical = shy", tReset: "reset transform", tFlipX: "flip horizontally",
-    hints: ["drag = move", "wheel = scale", "top handle = rotate", "bottom-left = shear", "click card = select/deselect", "saved automatically"],
+    tReorder: "drag ⠿ to reorder play sequence",
+    hints: ["⠿ grip = reorder", "drag = move", "wheel = scale", "top handle = rotate", "bottom-left = shear", "click card = select/deselect", "saved automatically"],
     exportDone: (n) => `${n} PNGs → curated/`,
   },
   ko: {
@@ -58,7 +59,8 @@ const STR = {
     exporting: "내보내는 중…", exportFail: "내보내기 실패: ",
     ready: "준비됨", loaded: "기존 큐레이션 로드됨", runLoadFail: "run 로드 실패:",
     tRotate: "회전", tShear: "기울이기 — 가로=shx, 세로=shy", tReset: "보정 초기화", tFlipX: "좌우 반전",
-    hints: ["드래그 = 이동", "휠 = 확대/축소", "상단 핸들 = 회전", "좌하단 = 기울이기", "카드 클릭 = 선택/해제", "자동 저장"],
+    tReorder: "⠿ 드래그로 재생 순서 변경",
+    hints: ["⠿ 그립 = 순서 변경", "드래그 = 이동", "휠 = 확대/축소", "상단 핸들 = 회전", "좌하단 = 기울이기", "카드 클릭 = 선택/해제", "자동 저장"],
     exportDone: (n) => `PNG ${n}장 → curated/`,
   },
 };
@@ -96,17 +98,23 @@ function getTransform(stateName, idx) {
 }
 
 function isSelected(stateName, idx) {
-  return entries[stateName].selected.includes(idx);
+  return entries[stateName].sel.has(idx);
 }
 
+// selection is a flag now; play order lives in `order`, so toggling no longer
+// sorts or moves a frame — its position in the sequence is preserved.
 function toggleSelect(stateName, idx) {
-  const sel = entries[stateName].selected;
-  const at = sel.indexOf(idx);
-  if (at >= 0) sel.splice(at, 1);
-  else {
-    sel.push(idx);
-    sel.sort((a, b) => a - b);
-  }
+  const { sel } = entries[stateName];
+  if (sel.has(idx)) sel.delete(idx);
+  else sel.add(idx);
+}
+
+// play sequence = display order filtered to selected frames.
+// This is exactly what gets persisted as curation.json `selected`, which
+// compose_sprite_atlas.py lays out left-to-right in this order.
+function playList(stateName) {
+  const e = entries[stateName];
+  return e.order.filter((idx) => e.sel.has(idx));
 }
 
 // --- persistence -----------------------------------------------------------
@@ -118,7 +126,7 @@ function buildPayload() {
     for (const [idx, t] of Object.entries(entry.transforms)) {
       if (t.rotate || t.scale !== 1 || t.dx || t.dy || t.shx || t.shy || t.flipX) transforms[idx] = t;
     }
-    states[name] = { selected: entry.selected, transforms };
+    states[name] = { selected: entry.order.filter((idx) => entry.sel.has(idx)), transforms };
   }
   return { version: run.schemaVersion || 1, kind: "sprite-gen-curation", states };
 }
@@ -269,6 +277,67 @@ function wireStage(stage, stateName, idx) {
   });
 }
 
+// --- frame reorder (drag the ⠿ grip to change play order) ------------------
+//
+// The grip lives in `.card-top`, outside `.stage`, so reordering never collides
+// with the stage's move/scale/rotate/shear drags. Reorder is done by live DOM
+// moves of the card during the drag; `order` is recomputed from the DOM on drop.
+
+function presentCards(framesEl) {
+  return [...framesEl.querySelectorAll(".card:not(.missing)")];
+}
+
+// the present card the dragged card should be inserted *before*, by pointer x
+// (the .frames strip is a single horizontal scroll row). null -> after them all.
+function reorderRefBefore(framesEl, dragCard, x) {
+  let ref = null;
+  let closest = -Infinity;
+  for (const card of presentCards(framesEl)) {
+    if (card === dragCard) continue;
+    const box = card.getBoundingClientRect();
+    const offset = x - (box.left + box.width / 2);
+    if (offset < 0 && offset > closest) {
+      closest = offset;
+      ref = card;
+    }
+  }
+  return ref;
+}
+
+function commitOrderFromDom(framesEl, stateName) {
+  entries[stateName].order = presentCards(framesEl).map((c) => Number(c.dataset.idx));
+}
+
+function wireReorder(grip, card, framesEl, stateName) {
+  grip.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    card.classList.add("dragging");
+    // missing cards (if any) stay pinned at the tail; insert before them, never after.
+    const firstMissing = framesEl.querySelector(".card.missing");
+
+    // move/end listeners live on window, not the grip: moving the card in the
+    // DOM mid-drag fires lostpointercapture, so a grip-scoped pointerup would be
+    // missed and the order never commit. window catches the release anywhere.
+    const onMove = (e) => {
+      const ref = reorderRefBefore(framesEl, card, e.clientX);
+      framesEl.insertBefore(card, ref || firstMissing); // null ref + no missing -> append at end
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      card.classList.remove("dragging");
+      commitOrderFromDom(framesEl, stateName);
+      renderSelectionState(stateName); // refresh count text node reference after DOM move
+      scheduleSave();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  });
+}
+
 function resetTransform(stateName, idx, stage) {
   entries[stateName].transforms[idx] = IDENTITY();
   applyCardTransform(stage, stateName, idx);
@@ -288,7 +357,7 @@ function renderSelectionState(stateName) {
   });
   const state = run.states.find((s) => s.name === stateName);
   const countEl = document.querySelector(`.preview[data-state="${cssEscape(stateName)}"] .count`);
-  if (countEl) countEl.textContent = `${entries[stateName].selected.length}/${state.requestFrames} ${t("frames")}`;
+  if (countEl) countEl.textContent = `${entries[stateName].sel.size}/${state.requestFrames} ${t("frames")}`;
 }
 
 function cssEscape(s) {
@@ -313,8 +382,15 @@ function renderState(state) {
 
   const framesEl = document.createElement("div");
   framesEl.className = "frames";
+  // render cards in play order (entries.order), so the strip reads as the
+  // sequence; missing frames are appended after, inert (not reorderable).
+  const frameByIdx = new Map(state.frames.map((f) => [f.index, f]));
+  for (const idx of entries[state.name].order) {
+    const frame = frameByIdx.get(idx);
+    if (frame) framesEl.appendChild(renderCard(state, frame));
+  }
   for (const frame of state.frames) {
-    framesEl.appendChild(renderCard(state, frame));
+    if (!frame.present) framesEl.appendChild(renderCard(state, frame));
   }
   body.appendChild(framesEl);
   body.appendChild(renderPreview(state));
@@ -322,13 +398,16 @@ function renderState(state) {
 
   document.getElementById("states").appendChild(wrap);
 
-  // wire stages after they are in the DOM (need clientWidth)
+  // wire stages + reorder grips after they are in the DOM (need clientWidth)
   for (const frame of state.frames) {
     if (!frame.present) continue;
-    const stage = wrap.querySelector(`.card[data-idx="${frame.index}"] .stage`);
+    const card = wrap.querySelector(`.card[data-idx="${frame.index}"]`);
+    const stage = card.querySelector(".stage");
     wireStage(stage, state.name, frame.index);
     applyCardTransform(stage, state.name, frame.index);
     if (run.iso) drawGroundGrid(stage);
+    const grip = card.querySelector(".grip");
+    if (grip) wireReorder(grip, card, framesEl, state.name);
   }
   renderSelectionState(state.name);
   startPreview(state);
@@ -352,7 +431,10 @@ function renderCard(state, frame) {
   const label = frame.label ? `${frame.label}` : `#${frame.index}`;
   card.innerHTML =
     `<div class="card-top">` +
+    `<span class="ct-left">` +
+    (frame.present ? `<span class="grip" title="${t("tReorder")}" aria-label="reorder">⠿</span>` : "") +
     `<span class="idx" title="frame ${frame.index}">${label}</span>` +
+    `</span>` +
     `<button type="button" class="ghost sel-btn">${t("excluded")}</button>` +
     `</div>` +
     `<div class="stage">${stageInner}</div>` +
@@ -410,15 +492,15 @@ function startPreview(state) {
   let last = 0;
 
   function frame(ts) {
-    const sel = entries[state.name].selected;
+    const play = playList(state.name);
     const interval = 1000 / Math.max(1, state.fps);
     if (ts - last >= interval) {
       last = ts;
-      cursor = sel.length ? (cursor + 1) % sel.length : 0;
+      cursor = play.length ? (cursor + 1) % play.length : 0;
     }
     ctx.clearRect(0, 0, cw, ch);
-    if (sel.length) {
-      const idx = sel[cursor % sel.length];
+    if (play.length) {
+      const idx = play[cursor % play.length];
       const url = state.frames[idx] ? state.frames[idx].url : null;
       const image = url ? img(url) : null;
       if (image && image.complete && image.naturalWidth) {
@@ -564,11 +646,20 @@ function seedEntries() {
   for (const state of run.states) {
     const present = state.frames.filter((f) => f.present).map((f) => f.index);
     const c = curated[state.name];
-    let selected;
-    if (c && Array.isArray(c.selected) && c.selected.length) {
-      selected = c.selected.filter((i) => present.includes(i));
+    const savedSel =
+      c && Array.isArray(c.selected) && c.selected.length
+        ? c.selected.filter((i) => present.includes(i))
+        : null;
+    // order = full display sequence of present frames; sel = which are on.
+    // saved `selected` is the play order, so it leads; deselected frames trail.
+    let order, sel;
+    if (savedSel && savedSel.length) {
+      const inSel = new Set(savedSel);
+      order = [...savedSel, ...present.filter((i) => !inSel.has(i))];
+      sel = new Set(savedSel);
     } else {
-      selected = present.slice();
+      order = present.slice();
+      sel = new Set(present);
     }
     const transforms = {};
     if (c && c.transforms) {
@@ -576,7 +667,7 @@ function seedEntries() {
         transforms[idx] = { ...IDENTITY(), ...t };
       }
     }
-    entries[state.name] = { selected, transforms };
+    entries[state.name] = { order, sel, transforms };
   }
 }
 
