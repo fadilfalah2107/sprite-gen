@@ -308,26 +308,87 @@ function commitOrderFromDom(framesEl, stateName) {
   entries[stateName].order = presentCards(framesEl).map((c) => Number(c.dataset.idx));
 }
 
+// FLIP: animate the non-dragged cards sliding to their new slots. Measure
+// (First), reorder DOM (mutate), then invert + Play so flexbox reflow — which
+// CSS transitions can't animate on their own — reads as a smooth slide.
+function flipReorder(framesEl, mutate) {
+  const cards = [...framesEl.querySelectorAll(".card:not(.dragging)")];
+  const first = cards.map((c) => c.getBoundingClientRect().left);
+  mutate();
+  cards.forEach((c, i) => {
+    const dl = first[i] - c.getBoundingClientRect().left;
+    if (Math.abs(dl) < 0.5) return;
+    c.style.transition = "none";
+    c.style.transform = `translateX(${dl}px)`;
+    requestAnimationFrame(() => {
+      c.style.transition = "transform 0.18s ease";
+      c.style.transform = "";
+    });
+  });
+}
+
 function wireReorder(grip, card, framesEl, stateName) {
   grip.addEventListener("pointerdown", (ev) => {
+    if (ev.button) return; // primary pointer only
     ev.preventDefault();
     ev.stopPropagation();
+
+    // lift the card out of flow so it floats under the cursor; a placeholder
+    // of the same size holds the slot it will drop into.
+    const rect = card.getBoundingClientRect();
+    const grabDX = ev.clientX - rect.left;
+    const grabDY = ev.clientY - rect.top;
+    const ph = document.createElement("div");
+    ph.className = "card-placeholder";
+    ph.style.width = `${rect.width}px`;
+    ph.style.height = `${rect.height}px`;
+    framesEl.insertBefore(ph, card);
+
     card.classList.add("dragging");
-    // missing cards (if any) stay pinned at the tail; insert before them, never after.
+    card.style.width = `${rect.width}px`;
+    card.style.height = `${rect.height}px`;
+    card.style.position = "fixed";
+    card.style.zIndex = "1000";
+    card.style.pointerEvents = "none";
+    const moveCard = (x, y) => {
+      card.style.left = `${x - grabDX}px`;
+      card.style.top = `${y - grabDY}px`;
+    };
+    moveCard(ev.clientX, ev.clientY);
+
+    // missing cards (if any) stay pinned at the tail; the gap never goes past them.
     const firstMissing = framesEl.querySelector(".card.missing");
 
-    // move/end listeners live on window, not the grip: moving the card in the
-    // DOM mid-drag fires lostpointercapture, so a grip-scoped pointerup would be
-    // missed and the order never commit. window catches the release anywhere.
+    // listeners on window (not the grip): the card is fixed/detached from flow,
+    // so a grip-scoped pointerup could be missed — window catches release anywhere.
     const onMove = (e) => {
-      const ref = reorderRefBefore(framesEl, card, e.clientX);
-      framesEl.insertBefore(card, ref || firstMissing); // null ref + no missing -> append at end
+      moveCard(e.clientX, e.clientY);
+      const target = reorderRefBefore(framesEl, card, e.clientX) || firstMissing;
+      if (ph.nextElementSibling === target || target === ph) return; // gap already here
+      flipReorder(framesEl, () => framesEl.insertBefore(ph, target));
     };
     const end = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
+      const fromRect = card.getBoundingClientRect();
       card.classList.remove("dragging");
+      card.style.position = card.style.left = card.style.top = "";
+      card.style.width = card.style.height = card.style.zIndex = card.style.pointerEvents = "";
+      framesEl.insertBefore(card, ph);
+      ph.remove();
+      // settle: slide the dropped card from the release point into its slot.
+      const toRect = card.getBoundingClientRect();
+      const dx = fromRect.left - toRect.left;
+      const dy = fromRect.top - toRect.top;
+      if (dx || dy) {
+        card.style.transition = "none";
+        card.style.transform = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(() => {
+          card.style.transition = "transform 0.16s ease";
+          card.style.transform = "";
+        });
+      }
       commitOrderFromDom(framesEl, stateName);
       renderSelectionState(stateName); // refresh count text node reference after DOM move
       scheduleSave();
