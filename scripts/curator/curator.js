@@ -300,8 +300,12 @@ function commitZones(wrap, stateName) {
   const { seq, pool } = zoneFrames(wrap);
   const seqIdx = presentCards(seq).map((c) => Number(c.dataset.idx));
   const poolIdx = presentCards(pool).map((c) => Number(c.dataset.idx));
+  // keep not-yet-extracted (missing) frames in order so their slot survives a
+  // reorder — if extraction later fills them in, they aren't silently dropped.
+  const state = run.states.find((s) => s.name === stateName);
+  const missingIdx = state ? state.frames.filter((f) => !f.present).map((f) => f.index) : [];
   entries[stateName].sel = new Set(seqIdx);
-  entries[stateName].order = [...seqIdx, ...poolIdx];
+  entries[stateName].order = [...seqIdx, ...poolIdx, ...missingIdx];
 }
 
 // the present card the dragged card should be inserted *before*, by pointer x
@@ -332,12 +336,15 @@ function pickZone(seq, pool, y) {
 // Play in 2D so cards slide — including vertically when they cross rows —
 // since flexbox reflow can't be animated by CSS transitions alone.
 function flipReorder(containers, mutate) {
-  const cards = containers.flatMap((c) => [...c.querySelectorAll(".card:not(.dragging)")]);
+  // exclude .missing (inert, not interactive) so unextracted slots don't animate
+  const cards = containers.flatMap((c) => [...c.querySelectorAll(".card:not(.dragging):not(.missing)")]);
   const first = cards.map((c) => {
     const b = c.getBoundingClientRect();
     return { l: b.left, t: b.top };
   });
   mutate();
+  // pass 1: apply the inverted transform with no transition
+  const moved = [];
   cards.forEach((c, i) => {
     const b = c.getBoundingClientRect();
     const dl = first[i].l - b.left;
@@ -345,11 +352,18 @@ function flipReorder(containers, mutate) {
     if (Math.abs(dl) < 0.5 && Math.abs(dt) < 0.5) return;
     c.style.transition = "none";
     c.style.transform = `translate(${dl}px, ${dt}px)`;
-    requestAnimationFrame(() => {
-      c.style.transition = "transform 0.18s ease";
-      c.style.transform = "";
-    });
+    moved.push(c);
   });
+  if (!moved.length) return;
+  // single forced reflow commits the inverted positions across all moved cards;
+  // a bare requestAnimationFrame is not reliable on Safari/Firefox (the inverted
+  // frame may not paint before the transition is enabled, so cards teleport).
+  void moved[0].offsetWidth;
+  // pass 2: enable the transition and release to home -> they slide
+  for (const c of moved) {
+    c.style.transition = "transform 0.18s ease";
+    c.style.transform = "";
+  }
 }
 
 // click affordance: send a card to the other row (sequence <-> pool), animated.
@@ -365,7 +379,7 @@ function moveCardToOtherZone(card, stateName) {
 
 function wireReorder(grip, card, wrap, stateName) {
   grip.addEventListener("pointerdown", (ev) => {
-    if (ev.button) return; // primary pointer only
+    if (ev.button || !ev.isPrimary) return; // primary button + primary pointer only (no multi-touch parallel drag)
     ev.preventDefault();
     ev.stopPropagation();
     const { seq, pool } = zoneFrames(wrap);
@@ -420,10 +434,9 @@ function wireReorder(grip, card, wrap, stateName) {
       if (dx || dy) {
         card.style.transition = "none";
         card.style.transform = `translate(${dx}px, ${dy}px)`;
-        requestAnimationFrame(() => {
-          card.style.transition = "transform 0.16s ease";
-          card.style.transform = "";
-        });
+        void card.offsetWidth; // commit before enabling transition (Safari/Firefox safe)
+        card.style.transition = "transform 0.16s ease";
+        card.style.transform = "";
       }
       commitZones(wrap, stateName);
       renderSelectionState(stateName); // refresh selection classes + count
@@ -811,13 +824,14 @@ function seedEntries() {
         : null;
     // order = full display sequence of present frames; sel = which are on.
     // saved `selected` is the play order, so it leads; deselected frames trail.
+    const missing = state.frames.filter((f) => !f.present).map((f) => f.index);
     let order, sel;
     if (savedSel && savedSel.length) {
       const inSel = new Set(savedSel);
-      order = [...savedSel, ...present.filter((i) => !inSel.has(i))];
+      order = [...savedSel, ...present.filter((i) => !inSel.has(i)), ...missing];
       sel = new Set(savedSel);
     } else {
-      order = present.slice();
+      order = [...present, ...missing];
       sel = new Set(present);
     }
     const transforms = {};
