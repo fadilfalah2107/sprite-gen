@@ -2,6 +2,13 @@
 
 All notable changes to `sprite-gen` are recorded here. Versions track the `version:` field in `SKILL.md`.
 
+## v1.8.2 — Preview UX polish
+
+Remaining low-severity items from the v1.8.0 adversarial review.
+
+- **Preview re-anchors on edits.** Reordering or moving frames no longer jumps the preview to a different frame — it keeps the on-screen frame in view (tracked by frame index), so a paused inspection stays put while you rearrange the sequence.
+- **Transport disabled when the sequence is empty.** Play/step buttons grey out (and the position reads `0/0`) when no frames are in the sequence, instead of looking active but doing nothing.
+
 ## v1.8.1 — Cross-platform hardening
 
 Fixes from an adversarial cross-platform / blast-radius review of the v1.8.0 curator.

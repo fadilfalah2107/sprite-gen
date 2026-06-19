@@ -271,6 +271,8 @@ body.show-grid .stage { background-image: none; background-color: #1a1d24; }
   line-height: 1;
 }
 .pv-controls .pv-play { min-width: 32px; }
+.pv-controls button:disabled { opacity: 0.4; cursor: default; }
+.pv-controls button:disabled:hover { background: transparent; }
 .pv-speed {
   background: var(--panel-2);
   color: var(--text);

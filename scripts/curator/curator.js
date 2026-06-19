@@ -374,6 +374,7 @@ function moveCardToOtherZone(card, stateName) {
   flipReorder([seq, pool], () => dest.appendChild(card));
   commitZones(wrap, stateName);
   renderSelectionState(stateName);
+  if (previews[stateName] && previews[stateName].refresh) previews[stateName].refresh();
   scheduleSave();
 }
 
@@ -440,6 +441,7 @@ function wireReorder(grip, card, wrap, stateName) {
       }
       commitZones(wrap, stateName);
       renderSelectionState(stateName); // refresh selection classes + count
+      if (previews[stateName] && previews[stateName].refresh) previews[stateName].refresh();
       scheduleSave();
     };
     window.addEventListener("pointermove", onMove);
@@ -624,7 +626,7 @@ function startPreview(state) {
   const ch = run.cell.height;
   const playBtn = root.querySelector(".pv-play");
   const posEl = root.querySelector(".pv-pos");
-  const pv = (previews[state.name] = { playing: true, speed: 1, cursor: 0 });
+  const pv = (previews[state.name] = { playing: true, speed: 1, cursor: 0, shown: -1 });
   let last = 0;
 
   const syncPlayBtn = () => {
@@ -643,6 +645,7 @@ function startPreview(state) {
     }
     pv.cursor = ((pv.cursor % play.length) + play.length) % play.length;
     const idx = play[pv.cursor];
+    pv.shown = idx; // remember which frame is on screen (for reanchoring on edits)
     const f = state.frames[idx];
     const image = f ? img(f.url) : null;
     if (image && image.complete && image.naturalWidth) {
@@ -673,6 +676,27 @@ function startPreview(state) {
   root.querySelector(".pv-speed").addEventListener("change", (e) => {
     pv.speed = parseFloat(e.target.value) || 1;
   });
+
+  // Called after the selection/order changes (move between rows, reorder). Keeps
+  // the on-screen frame in view instead of jumping (re-anchor by frame index),
+  // and disables the transport when the sequence is empty (nothing to play).
+  const prevBtn = root.querySelector(".pv-prev");
+  const nextBtn = root.querySelector(".pv-next");
+  pv.refresh = () => {
+    const play = playList(state.name);
+    if (!play.length) {
+      pv.cursor = 0;
+    } else {
+      const p = play.indexOf(pv.shown);
+      pv.cursor = p >= 0 ? p : ((pv.cursor % play.length) + play.length) % play.length;
+    }
+    const empty = play.length === 0;
+    prevBtn.disabled = empty;
+    nextBtn.disabled = empty;
+    playBtn.disabled = empty;
+    draw();
+  };
+  pv.refresh();
 
   function frame(ts) {
     const play = playList(state.name);
