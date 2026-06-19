@@ -72,6 +72,12 @@ The webview ships with English and Korean. Pass `--lang en|ko` when launching, o
 python3 scripts/serve_curation.py --run-dir <run-dir> --lang en   # or ko
 ```
 
+## Python support
+
+`sprite-gen` supports CPython 3.10+. CI runs the minimum supported version (3.10) and the latest covered version (3.14) on GitHub-hosted runners.
+
+The quickstart requires a Python install with working `venv`/`ensurepip`. If `python3 -m venv` fails before package installation in a local distribution, use a standard CPython build for any supported version and rerun the same commands.
+
 ## Quickstart
 
 ```bash
